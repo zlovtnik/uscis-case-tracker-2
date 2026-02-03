@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package uscis.proto;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "uscis.proto";
+
+// Update type enum for case status changes
+enum UpdateType {
+  UPDATE_TYPE_UNSPECIFIED = 0;
+  UPDATE_TYPE_NEW = 1;
+  UPDATE_TYPE_CHANGED = 2;
+  UPDATE_TYPE_UNCHANGED = 3;
+}
+
+// USCIS Case Tracker gRPC Service
+// Note: For standard health checking, use grpc.health.v1.Health service
+// which is registered separately via ProtoReflectionService.
+service USCISCaseService {
+  // Add or update a case
+  rpc AddCase(AddCaseRequest) returns (AddCaseResponse);
+  
+  // Get a specific case by receipt number
+  rpc GetCase(GetCaseRequest) returns (GetCaseResponse);
+  
+  // List all cases with optional filtering
+  rpc ListCases(ListCasesRequest) returns (ListCasesResponse);
+  
+  // Check status of a case (fetches from USCIS)
+  rpc CheckStatus(CheckStatusRequest) returns (CheckStatusResponse);
+  
+  // Delete a case
+  rpc DeleteCase(DeleteCaseRequest) returns (DeleteCaseResponse);
+  
+  // Export cases (server streaming to handle large datasets)
+  rpc ExportCases(ExportCasesRequest) returns (stream ExportCasesResponse);
+  
+  // Import cases (client streaming for large payloads)
+  rpc ImportCases(stream ImportCasesChunk) returns (ImportCasesResponse);
+  
+  // Stream case status updates (server streaming)
+  rpc WatchCases(WatchCasesRequest) returns (stream CaseUpdate);
+  
+  // Health check (deprecated: prefer grpc.health.v1.Health.Check)
+  // Kept for backward compatibility
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ============================================================
+// Common Types
+// ============================================================
+
+message CaseStatus {
+  string receipt_number = 1;
+  string case_type = 2;
+  string current_status = 3;
+  google.protobuf.Timestamp last_updated = 4;  // When the status was last updated
+  optional string details = 5;
+}
+
+message CaseHistory {
+  string receipt_number = 1;
+  // List of status updates, ordered from newest to oldest.
+  // When GetCaseRequest.include_history is false, this will contain
+  // only the latest status update (single element).
+  repeated CaseStatus status_updates = 2;
+}
+
+// ============================================================
+// Add Case
+// ============================================================
+
+message AddCaseRequest {
+  string receipt_number = 1;
+  optional string case_type = 2;
+  optional string current_status = 3;
+  optional string details = 4;
+  bool fetch_from_uscis = 5;  // If true, fetch status from USCIS
+}
+
+message AddCaseResponse {
+  bool success = 1;
+  optional CaseStatus case_status = 2;
+  optional string error_message = 3;
+}
+
+// ============================================================
+// Get Case
+// ============================================================
+
+message GetCaseRequest {
+  string receipt_number = 1;
+  // If true, returns full status history in CaseHistory.status_updates.
+  // If false, returns only the latest status (single element in status_updates).
+  bool include_history = 2;
+}
+
+message GetCaseResponse {
+  bool found = 1;
+  // Contains the case data. When include_history=false, status_updates
+  // will contain only the most recent status update.
+  optional CaseHistory case_history = 2;
+  optional string error_message = 3;
+}
+
+// ============================================================
+// List Cases
+// ============================================================
+
+message ListCasesRequest {
+  optional string receipt_filter = 1;  // Filter by receipt number prefix
+  bool include_history = 2;
+  // Page size for pagination. If 0 or unset, server uses default of 20.
+  int32 page_size = 3;
+  // Page number (1-indexed). If 0 or unset, server treats as page 1.
+  int32 page = 4;
+}
+
+message ListCasesResponse {
+  repeated CaseHistory cases = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 total_pages = 4;
+}
+
+// ============================================================
+// Check Status
+// ============================================================
+
+message CheckStatusRequest {
+  string receipt_number = 1;
+  bool save_to_database = 2;
+}
+
+message CheckStatusResponse {
+  bool success = 1;
+  optional CaseStatus case_status = 2;
+  optional string error_message = 3;
+}
+
+// ============================================================
+// Delete Case
+// ============================================================
+
+message DeleteCaseRequest {
+  string receipt_number = 1;
+}
+
+message DeleteCaseResponse {
+  bool success = 1;
+  optional string error_message = 2;
+}
+
+// ============================================================
+// Export Cases (Server Streaming)
+// ============================================================
+
+message ExportCasesRequest {
+  // Optional: filter by receipt number prefix
+  optional string receipt_filter = 1;
+  // Page size for streaming chunks. If 0, server uses default chunk size.
+  int32 chunk_size = 2;
+}
+
+message ExportCasesResponse {
+  // JSON data for this chunk of cases
+  string json_data = 1;
+  // Number of cases in this chunk
+  int32 case_count = 2;
+  // Total status updates in this chunk
+  int32 total_updates = 3;
+  // Sequence number of this chunk (0-indexed)
+  int32 chunk_index = 4;
+  // True if this is the last chunk
+  bool is_last_chunk = 5;
+}
+
+// ============================================================
+// Import Cases (Client Streaming)
+// ============================================================
+
+// Chunk message for streaming import
+message ImportCasesChunk {
+  // JSON data chunk (partial or complete)
+  string json_data = 1;
+  // Sequence number of this chunk (0-indexed)
+  int32 chunk_index = 2;
+  // True if this is the last chunk
+  bool is_last_chunk = 3;
+  // Only read from first chunk: whether to replace existing cases
+  bool replace_existing = 4;
+}
+
+message ImportCasesResponse {
+  bool success = 1;
+  int32 imported_count = 2;
+  optional string error_message = 3;
+}
+
+// ============================================================
+// Watch Cases (Streaming)
+// ============================================================
+
+message WatchCasesRequest {
+  repeated string receipt_numbers = 1;  // Empty means watch all
+  int32 poll_interval_seconds = 2;      // How often to check (default 60)
+}
+
+message CaseUpdate {
+  CaseStatus case_status = 1;
+  UpdateType update_type = 2;  // Type of update detected
+  string timestamp = 3;
+}
+
+// ============================================================
+// Health Check (Deprecated - use grpc.health.v1.Health)
+// ============================================================
+
+// Deprecated: Use grpc.health.v1.Health.Check instead for standard health checking.
+message HealthCheckRequest {
+}
+
+// Deprecated: Use grpc.health.v1.HealthCheckResponse instead.
+message HealthCheckResponse {
+  bool healthy = 1;
+  string version = 2;
+  int64 uptime_seconds = 3;
+  int32 tracked_cases = 4;
+}

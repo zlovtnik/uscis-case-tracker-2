@@ -1,0 +1,39 @@
+# Build artifacts
+target/
+project/target/
+project/project/target/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+.metals/
+.bloop/
+.bsp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local data
+.uscis-tracker/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Documentation (not needed in image)
+*.md
+!README.md
+
+# Test data
+test-data/
