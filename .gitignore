@@ -1,0 +1,54 @@
+# Scala/SBT build artifacts
+target/
+project/target/
+project/project/target/
+
+# SBT
+.bsp/
+.metals/
+.bloop/
+metals.sbt
+.scala-build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Application data
+.uscis-tracker/
+*.json
+!package.json
+
+# Export files
+uscis-export-*.json
+
+# Secrets - never commit these
+.env
+.env.*
+application.local.conf
+secrets.conf
+
+# Compiled class files
+*.class
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs
+hs_err_pid*
+replay_pid*
