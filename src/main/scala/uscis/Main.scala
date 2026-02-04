@@ -5,6 +5,7 @@ import cats.syntax.all._
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.slf4j.bridge.SLF4JBridgeHandler
+import java.util.logging.{Level, LogManager}
 import uscis.server.GrpcServer
 
 /**
@@ -17,16 +18,24 @@ import uscis.server.GrpcServer
  */
 object Main extends IOApp {
 
-  // Initialize JUL-to-SLF4J bridge before anything else
-  // This routes gRPC/Netty's java.util.logging through Logback
-  private def initLoggingBridge: IO[Unit] = IO.delay {
+  // Initialize logging configuration before anything else
+  // Suppresses noisy gRPC/Netty transport logs from HTTP/1.x health checks
+  private def initLogging: IO[Unit] = IO.delay {
+    // Install JUL-to-SLF4J bridge for non-shaded classes
     SLF4JBridgeHandler.removeHandlersForRootLogger()
     SLF4JBridgeHandler.install()
+    
+    // Suppress shaded Netty transport logs directly via JUL
+    // These bypass the SLF4J bridge because they're relocated classes
+    val nettyTransportLogger = java.util.logging.Logger.getLogger(
+      "io.grpc.netty.shaded.io.grpc.netty.NettyServerTransport"
+    )
+    nettyTransportLogger.setLevel(Level.SEVERE)
   }
 
   override def run(args: List[String]): IO[ExitCode] = {
     val program = for {
-      _      <- initLoggingBridge
+      _      <- initLogging
       logger <- Slf4jLogger.create[IO]
       config <- GrpcServer.loadConfig
       _      <- logger.info("=" * 60)
