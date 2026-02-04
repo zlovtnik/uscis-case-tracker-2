@@ -16,6 +16,7 @@ Compile / run / fork := true
 val http4sVersion = "0.23.25"
 val circeVersion = "0.14.6"
 val armeriaVersion = "1.31.0" // Use latest Armeria for ScalaPB compatibility
+val doobieVersion = "1.0.0-RC5"
 
 libraryDependencies ++= Seq(
   // Cats Effect for functional programming
@@ -31,6 +32,16 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "io.circe" %% "circe-parser" % circeVersion,
+  
+  // Database - Doobie (functional JDBC layer for Cats Effect)
+  "org.tpolecat" %% "doobie-core" % doobieVersion,
+  "org.tpolecat" %% "doobie-hikari" % doobieVersion,  // HikariCP connection pool
+  
+  // Oracle JDBC Driver with all security extensions for wallet support
+  // ojdbc11-production bundles: ojdbc11, oraclepki, osdt_core, osdt_cert
+  "com.oracle.database.jdbc" % "ojdbc11-production" % "23.5.0.24.07" pomOnly(),
+  "com.oracle.database.jdbc" % "ojdbc11" % "23.5.0.24.07",
+  "com.oracle.database.security" % "oraclepki" % "23.5.0.24.07",
   
   // Armeria - unified HTTP/gRPC/gRPC-Web server
   // Supports HTTP/1.1, HTTP/2, gRPC, gRPC-Web on single port

@@ -167,14 +167,54 @@ object ArmeriaServer {
   /**
    * Create server with all dependencies initialized.
    * Accepts pre-loaded config to avoid double-loading.
+   * Uses Oracle persistence by default, falls back to JSON if Oracle not configured.
    */
   def resourceWithPersistence(config: ServerConfig): Resource[IO, Server] =
     for {
-      _          <- Resource.eval(PersistenceManager.initialize)
-      httpClient <- USCISApiClient.httpClientResource
-      tokenCache <- Resource.eval(USCISApiClient.createTokenCache(httpClient))
-      server     <- resource(config, PersistenceManager, httpClient, tokenCache)
+      persistence <- createPersistenceResource
+      httpClient  <- USCISApiClient.httpClientResource
+      tokenCache  <- Resource.eval(USCISApiClient.createTokenCache(httpClient))
+      server      <- resource(config, persistence, httpClient, tokenCache)
     } yield server
+
+  /**
+   * Create the appropriate persistence manager based on configuration.
+   * - If USCIS_STORAGE_TYPE=oracle and Oracle config is valid, use OraclePersistenceManager
+   * - Otherwise, fall back to JSON file-based PersistenceManager
+   */
+  private def createPersistenceResource: Resource[IO, PersistenceManager] = {
+    import uscis.persistence.OraclePersistenceManager
+    
+    Resource.eval(IO.delay {
+      val config = ConfigFactory.load()
+      val storageType = if (config.hasPath("uscis.storage.type")) 
+                          config.getString("uscis.storage.type") 
+                        else "json"
+      storageType.toLowerCase
+    }).flatMap {
+      case "oracle" =>
+        // Try to create Oracle persistence
+        Resource.eval(OraclePersistenceManager.loadConfig.attempt).flatMap {
+          case Right(oracleConfig) if oracleConfig.jdbcUrl.nonEmpty && oracleConfig.user.nonEmpty =>
+            Resource.eval(logger.info("Using Oracle database persistence")) *>
+            OraclePersistenceManager.resource(oracleConfig)
+              .map(pm => pm: PersistenceManager)
+          case Right(_) =>
+            Resource.eval(logger.warn("Oracle config incomplete, falling back to JSON persistence")) *>
+            createJsonPersistenceResource
+          case Left(err) =>
+            Resource.eval(logger.warn(s"Failed to load Oracle config: ${err.getMessage}, falling back to JSON persistence")) *>
+            createJsonPersistenceResource
+        }
+      case _ =>
+        Resource.eval(logger.info("Using JSON file persistence")) *>
+        createJsonPersistenceResource
+    }
+  }
+
+  /** Create JSON file-based persistence */
+  private def createJsonPersistenceResource: Resource[IO, PersistenceManager] =
+    Resource.eval(PersistenceManager.initialize).map(_ => PersistenceManager: PersistenceManager) // Returns companion object as PersistenceManager trait implementation
 
   /** Overload for backward compatibility - loads config internally */
   def resourceWithPersistence: Resource[IO, Server] =
