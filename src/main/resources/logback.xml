@@ -15,9 +15,10 @@
     <logger name="uscis.grpc" level="${USCIS_GRPC_LOG_LEVEL}"/>
     <logger name="uscis.server" level="INFO"/>
     
-    <!-- gRPC logging -->
+    <!-- gRPC/Netty logging - suppress transport noise from HTTP/1.x health checks -->
     <logger name="io.grpc" level="WARN"/>
-    <logger name="io.grpc.netty" level="WARN"/>
+    <logger name="io.grpc.netty" level="ERROR"/>
+    <logger name="io.grpc.netty.shaded.io.grpc.netty.NettyServerTransport" level="OFF"/>
     
     <!-- Suppress noisy library logs -->
     <logger name="play" level="WARN"/>

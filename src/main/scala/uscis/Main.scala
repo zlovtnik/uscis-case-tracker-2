@@ -4,6 +4,7 @@ import cats.effect.{IO, IOApp, ExitCode, Resource}
 import cats.syntax.all._
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+import org.slf4j.bridge.SLF4JBridgeHandler
 import uscis.server.GrpcServer
 
 /**
@@ -16,8 +17,16 @@ import uscis.server.GrpcServer
  */
 object Main extends IOApp {
 
+  // Initialize JUL-to-SLF4J bridge before anything else
+  // This routes gRPC/Netty's java.util.logging through Logback
+  private def initLoggingBridge: IO[Unit] = IO.delay {
+    SLF4JBridgeHandler.removeHandlersForRootLogger()
+    SLF4JBridgeHandler.install()
+  }
+
   override def run(args: List[String]): IO[ExitCode] = {
     val program = for {
+      _      <- initLoggingBridge
       logger <- Slf4jLogger.create[IO]
       config <- GrpcServer.loadConfig
       _      <- logger.info("=" * 60)

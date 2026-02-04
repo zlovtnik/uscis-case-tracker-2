@@ -44,6 +44,7 @@ libraryDependencies ++= Seq(
   // Logging
   "org.typelevel" %% "log4cats-slf4j" % "2.6.0",
   "ch.qos.logback" % "logback-classic" % "1.4.14",
+  "org.slf4j" % "jul-to-slf4j" % "2.0.9", // Bridge JUL (used by gRPC/Netty) to SLF4J
   
   // Testing
   "org.scalatest" %% "scalatest" % "3.2.18" % Test,
