@@ -4,7 +4,8 @@ import cats.effect.{IO, Ref, Resource}
 import cats.syntax.all._
 import io.grpc.{Server, ServerBuilder}
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
-import io.grpc.protobuf.services.ProtoReflectionService
+import io.grpc.protobuf.services.{HealthStatusManager, ProtoReflectionService}
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus
 import org.http4s.client.Client
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -61,6 +62,16 @@ object GrpcServer {
                    )
       service    = new USCISCaseServiceImpl(persistence, httpClient, tokenCache, startTime)
       serviceDef <- USCISCaseServiceFs2Grpc.bindServiceResource[IO](service)
+      
+      // gRPC Health Check service for Kubernetes/Docker health probes
+      healthManager = new HealthStatusManager()
+      _         <- Resource.eval(IO.delay {
+                     // Set overall server health status
+                     healthManager.setStatus("", ServingStatus.SERVING)
+                     // Set service-specific health status
+                     healthManager.setStatus("uscis.USCISCaseService", ServingStatus.SERVING)
+                   })
+      
       server    <- Resource.make(
                      for {
                        _      <- logger.info(s"Starting gRPC server on ${cfg.host}:${cfg.port}")
@@ -68,6 +79,7 @@ object GrpcServer {
                                    NettyServerBuilder
                                      .forAddress(new InetSocketAddress(cfg.host, cfg.port))
                                      .addService(serviceDef)
+                                     .addService(healthManager.getHealthService)
                                      .addService(ProtoReflectionService.newInstance())
                                      .build()
                                      .start()
@@ -77,6 +89,7 @@ object GrpcServer {
                    )(server =>
                      for {
                        _          <- logger.info("Shutting down gRPC server...")
+                       _          <- IO.delay(healthManager.setStatus("", ServingStatus.NOT_SERVING))
                        _          <- IO.blocking(server.shutdown())
                        terminated <- IO.blocking(server.awaitTermination(30, TimeUnit.SECONDS))
                        _          <- if (!terminated) 

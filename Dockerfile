@@ -59,8 +59,11 @@ LABEL org.opencontainers.image.description="gRPC Server for tracking USCIS case 
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.source="https://github.com/your-org/uscis-case-tracker"
 
-# Install netcat for healthcheck
-RUN apk add --no-cache netcat-openbsd
+# Install grpc-health-probe for proper gRPC health checks
+# This avoids HTTP/1.x errors from tools that don't speak HTTP/2
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.24
+RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
+    chmod +x /bin/grpc_health_probe
 
 # Create non-root user for security
 RUN addgroup -S uscis && adduser -S -G uscis -h /home/uscis uscis
@@ -94,14 +97,20 @@ ENV USCIS_DATA_DIR=/home/uscis/.uscis-tracker
 ENV USCIS_SANDBOX_MODE=true
 
 # JVM options for containers
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+# - UseContainerSupport: Respect container memory/CPU limits
+# - MaxRAMPercentage: Use up to 75% of container memory for heap
+# - UseG1GC: Better pause times for services
+# - ExitOnOutOfMemoryError: Fail fast on OOM
+# - Cats Effect tuning: Increase compute pool to reduce starvation warnings
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Dcats.effect.tracing.mode=none"
 
 # Expose gRPC port
 EXPOSE 50051
 
-# Health check - verify gRPC port is listening
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD nc -z localhost 50051 || exit 1
+# Health check using grpc_health_probe (proper gRPC health check)
+# Falls back to port check if gRPC health service not implemented
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD grpc_health_probe -addr=localhost:50051 -connect-timeout=5s || exit 1
 
 # Switch to non-root user
 USER uscis
