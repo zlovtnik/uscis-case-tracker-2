@@ -25,6 +25,11 @@ object Main extends IOApp {
 
   // Initialize logging configuration before anything else
   private def initLogging: IO[Unit] = IO.delay {
+    // Force use of standard JDK XML parser instead of Oracle's restrictive parser
+    // This prevents logback configuration errors when Oracle JDBC driver is present
+    System.setProperty("javax.xml.parsers.SAXParserFactory", "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
+    System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl")
+    
     // Install JUL-to-SLF4J bridge for non-shaded classes
     SLF4JBridgeHandler.removeHandlersForRootLogger()
     SLF4JBridgeHandler.install()
