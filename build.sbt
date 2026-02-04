@@ -21,8 +21,9 @@ libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-effect" % "3.5.4",
   "org.typelevel" %% "cats-core" % "2.10.0",
   
-  // HTTP Client (http4s)
+  // HTTP Client and Server (http4s)
   "org.http4s" %% "http4s-ember-client" % http4sVersion,
+  "org.http4s" %% "http4s-ember-server" % http4sVersion, // For HTTP health check server
   "org.http4s" %% "http4s-circe" % http4sVersion,
   "org.http4s" %% "http4s-dsl" % http4sVersion,
   

@@ -6,13 +6,17 @@ import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.util.logging.{Level, LogManager}
-import uscis.server.GrpcServer
+import uscis.server.{GrpcServer, HealthServer}
 
 /**
  * USCIS Case Tracker gRPC Server.
  * 
  * A functional gRPC service for tracking USCIS case statuses.
  * Uses Cats Effect for pure functional effect management.
+ * 
+ * Runs both:
+ * - gRPC server (default: port 50051) for API clients
+ * - HTTP health server (default: port 8080) for cloud platform health checks
  * 
  * The server runs until interrupted (SIGINT/SIGTERM).
  */
@@ -35,21 +39,23 @@ object Main extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] = {
     val program = for {
-      _      <- initLogging
-      logger <- Slf4jLogger.create[IO]
-      config <- GrpcServer.loadConfig
-      _      <- logger.info("=" * 60)
-      _      <- logger.info("USCIS Case Tracker gRPC Server v0.1.0")
-      _      <- logger.info("=" * 60)
-      _      <- logger.info(s"Starting server on ${config.host}:${config.port}")
-      result <- GrpcServer.resourceWithPersistence
-                  .use { server =>
-                    for {
-                      _ <- logger.info("Server is ready to accept connections")
-                      _ <- logger.info("Press Ctrl+C to shutdown")
-                      _ <- IO.never[Unit] // Keep running until interrupted
-                    } yield ExitCode.Success
-                  }
+      _           <- initLogging
+      logger      <- Slf4jLogger.create[IO]
+      grpcConfig  <- GrpcServer.loadConfig
+      healthConfig <- HealthServer.loadConfig
+      _           <- logger.info("=" * 60)
+      _           <- logger.info("USCIS Case Tracker gRPC Server v0.1.0")
+      _           <- logger.info("=" * 60)
+      _           <- logger.info(s"gRPC server: ${grpcConfig.host}:${grpcConfig.port}")
+      _           <- logger.info(s"Health server: port ${healthConfig.port}")
+      result      <- (HealthServer.resource, GrpcServer.resourceWithPersistence).tupled
+                       .use { case (healthServer, grpcServer) =>
+                         for {
+                           _ <- logger.info("All servers started successfully")
+                           _ <- logger.info("Press Ctrl+C to shutdown")
+                           _ <- IO.never[Unit] // Keep running until interrupted
+                         } yield ExitCode.Success
+                       }
     } yield result
 
     program.handleErrorWith { error =>
