@@ -48,6 +48,13 @@ trait PersistenceManager {
    *  @return Count of matching cases
    */
   def countCases(filter: Option[String]): IO[Int]
+
+  /** Get cases by a list of receipt numbers.
+   *  Filters at the data layer instead of loading all cases into memory.
+   *  @param receiptNumbers List of exact receipt numbers to match
+   *  @return List of case histories matching any of the provided receipt numbers
+   */
+  def getCasesByReceipts(receiptNumbers: List[String]): IO[List[CaseHistory]]
 }
 
 object PersistenceManager extends PersistenceManager {
@@ -214,6 +221,16 @@ object PersistenceManager extends PersistenceManager {
       filter match {
         case Some(f) => cases.count(_.receiptNumber.toUpperCase.contains(f.toUpperCase))
         case None    => cases.size
+      }
+    }
+
+  /** Get cases by a list of exact receipt numbers */
+  override def getCasesByReceipts(receiptNumbers: List[String]): IO[List[CaseHistory]] =
+    loadCases.map { cases =>
+      if (receiptNumbers.isEmpty) cases
+      else {
+        val receiptSet = receiptNumbers.toSet
+        cases.filter(c => receiptSet.contains(c.receiptNumber))
       }
     }
 }
